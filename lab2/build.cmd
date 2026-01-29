@@ -42,7 +42,16 @@ if %ERRORLEVEL% equ 0 (
         echo ===============================
         echo Running test utility
         echo ===============================
-        test_runner.exe
+
+        set EXE_PATH=%CD%\test_runner.exe
+        if not exist %EXE_PATH% set EXE_PATH=%CD%\bin\test_runner.exe
+
+        if exist %EXE_PATH% (
+            %EXE_PATH%
+        ) else (
+            echo Cannot find test_runner.exe!
+        )
+
     )
 ) else (
     echo ===============================
