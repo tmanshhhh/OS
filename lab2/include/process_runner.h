@@ -5,29 +5,53 @@
 
 namespace process_runner {
 
-// Дескриптор процесса
+/**
+ * Дескриптор запущенного процесса
+ */
 struct ProcessHandle {
 #ifdef _WIN32
-    void* process = nullptr;  // HANDLE на Windows
+    void* process = nullptr;  // HANDLE (Windows)
 #else
-    int pid = -1;             // PID на POSIX
+    int pid = -1;             // PID (POSIX)
 #endif
 };
 
-// Запускает процесс в фоновом режиме.
-// args[0] — исполняемый файл, остальные — аргументы.
-// handle — дескриптор для последующего управления процессом.
-// err — необязательный вывод ошибок.
-// Возвращает true, если процесс успешно запущен.
-bool start(const std::vector<std::string>& args, ProcessHandle& handle, std::string* err = nullptr);
+/**
+ * Запуск программы в фоновом режиме.
+ * args[0] — путь к исполняемому файлу,
+ * args[1..] — аргументы командной строки.
+ *
+ * @param args   команда и аргументы
+ * @param handle дескриптор процесса
+ * @param err    строка для сообщения об ошибке (опционально)
+ * @return true при успешном запуске
+ */
+bool start(
+    const std::vector<std::string>& args,
+    ProcessHandle& handle,
+    std::string* err = nullptr
+);
 
-// Ждёт завершения процесса.
-// exit_code — код завершения процесса.
-// timeout_ms < 0 — ждать бесконечно.
-// Возвращает true, если процесс завершился успешно.
-bool wait(ProcessHandle& handle, int& exit_code, int timeout_ms = -1, std::string* err = nullptr);
+/**
+ * Ожидание завершения процесса.
+ *
+ * @param handle     дескриптор процесса
+ * @param exit_code код завершения
+ * @param timeout_ms таймаут в миллисекундах,
+ *                   timeout_ms < 0 — ждать бесконечно
+ * @param err        строка для сообщения об ошибке (опционально)
+ * @return true при успешном ожидании
+ */
+bool wait(
+    ProcessHandle& handle,
+    int& exit_code,
+    int timeout_ms = -1,
+    std::string* err = nullptr
+);
 
-// Освобождает ресурсы, связанные с дескриптором процесса.
+/**
+ * Освобождение ресурсов дескриптора процесса
+ */
 void close(ProcessHandle& handle);
 
 } // namespace process_runner

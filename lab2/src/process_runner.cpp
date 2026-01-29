@@ -1,8 +1,8 @@
 #include "process_runner.h"
 
 #include <chrono>
-#include <string>
 #include <sstream>
+#include <string>
 #include <thread>
 #include <vector>
 
@@ -18,7 +18,7 @@
 
 namespace {
 
-// Вспомогательная функция для записи ошибки
+// записать текст ошибки
 void set_err(std::string* out, const std::string& msg) {
     if (out) {
         *out = msg;
@@ -26,9 +26,11 @@ void set_err(std::string* out, const std::string& msg) {
 }
 
 #ifdef _WIN32
-// Экранирование аргументов для командной строки Windows
+
+// корректное экранирование аргументов командной строки
 std::string quote_arg(const std::string& arg) {
     if (arg.empty()) return "\"\"";
+
     bool need_quotes = arg.find_first_of(" \t\"") != std::string::npos;
     if (!need_quotes) return arg;
 
@@ -42,12 +44,14 @@ std::string quote_arg(const std::string& arg) {
             ++backslashes;
             continue;
         }
+
         if (ch == '"') {
             result.append(backslashes * 2 + 1, '\\');
             result.push_back('"');
             backslashes = 0;
             continue;
         }
+
         result.append(backslashes, '\\');
         backslashes = 0;
         result.push_back(ch);
@@ -58,62 +62,59 @@ std::string quote_arg(const std::string& arg) {
     return result;
 }
 
-// Собирает командную строку
 std::string make_command_line(const std::vector<std::string>& args) {
     std::ostringstream oss;
     for (size_t i = 0; i < args.size(); ++i) {
-        if (i > 0) oss << ' ';
+        if (i) oss << ' ';
         oss << quote_arg(args[i]);
     }
     return oss.str();
 }
 
-// Форматируем последний Win32 error
 std::string format_last_error() {
     DWORD code = GetLastError();
     if (code == 0) return {};
+
     LPSTR buffer = nullptr;
     DWORD size = FormatMessageA(
         FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-        nullptr,
-        code,
-        MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-        reinterpret_cast<LPSTR>(&buffer),
-        0,
-        nullptr);
+        nullptr, code, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+        (LPSTR)&buffer, 0, nullptr);
+
     std::string message = "Win32 error " + std::to_string(code);
-    if (size && buffer) message += ": " + std::string(buffer, size);
+    if (size && buffer) {
+        message += ": ";
+        message.append(buffer, size);
+    }
     if (buffer) LocalFree(buffer);
     return message;
 }
 
 #else
 
-// Преобразуем std::vector<std::string> в argv для POSIX
 std::vector<char*> to_argv(const std::vector<std::string>& args) {
     std::vector<char*> argv;
     argv.reserve(args.size() + 1);
-    for (auto& a : args) argv.push_back(const_cast<char*>(a.c_str()));
+    for (const auto& a : args)
+        argv.push_back(const_cast<char*>(a.c_str()));
     argv.push_back(nullptr);
     return argv;
 }
 
 #endif
 
-} // namespace
+} // anonymous namespace
 
 namespace process_runner {
 
-// =====================
-// Запуск процесса
-// =====================
+// запуск процесса
 bool start(const std::vector<std::string>& args, ProcessHandle& handle, std::string* err) {
     if (args.empty()) {
         set_err(err, "No executable specified");
         return false;
     }
 
-    close(handle); // очищаем предыдущий дескриптор
+    close(handle);
 
 #ifdef _WIN32
     std::string cmdline = make_command_line(args);
@@ -125,23 +126,16 @@ bool start(const std::vector<std::string>& args, ProcessHandle& handle, std::str
     PROCESS_INFORMATION pi{};
 
     BOOL ok = CreateProcessA(
-        nullptr,
-        buffer.data(),
-        nullptr,
-        nullptr,
-        FALSE,
-        0,
-        nullptr,
-        nullptr,
-        &si,
-        &pi);
+        nullptr, buffer.data(),
+        nullptr, nullptr, FALSE, 0,
+        nullptr, nullptr, &si, &pi);
 
     if (!ok) {
         set_err(err, format_last_error());
         return false;
     }
 
-    CloseHandle(pi.hThread); // поток не нужен
+    CloseHandle(pi.hThread);
     handle.process = pi.hProcess;
     return true;
 
@@ -150,8 +144,9 @@ bool start(const std::vector<std::string>& args, ProcessHandle& handle, std::str
     if (pid == 0) {
         auto argv = to_argv(args);
         execvp(argv[0], argv.data());
-        _exit(127); // exec failed
+        _exit(127);
     }
+
     if (pid < 0) {
         set_err(err, "fork failed: " + std::to_string(errno));
         return false;
@@ -162,21 +157,20 @@ bool start(const std::vector<std::string>& args, ProcessHandle& handle, std::str
 #endif
 }
 
-// =====================
-// Ожидание завершения
-// =====================
+// ожидание завершения
 bool wait(ProcessHandle& handle, int& exit_code, int timeout_ms, std::string* err) {
+
 #ifdef _WIN32
     if (!handle.process) {
         set_err(err, "Process handle is empty");
         return false;
     }
 
-    DWORD wait_time = timeout_ms < 0 ? INFINITE : static_cast<DWORD>(timeout_ms);
+    DWORD wait_time = timeout_ms < 0 ? INFINITE : (DWORD)timeout_ms;
     DWORD res = WaitForSingleObject(handle.process, wait_time);
 
     if (res == WAIT_TIMEOUT) {
-        set_err(err, "Timed out");
+        set_err(err, "Timeout");
         return false;
     }
     if (res != WAIT_OBJECT_0) {
@@ -192,7 +186,7 @@ bool wait(ProcessHandle& handle, int& exit_code, int timeout_ms, std::string* er
 
     CloseHandle(handle.process);
     handle.process = nullptr;
-    exit_code = static_cast<int>(code);
+    exit_code = (int)code;
     return true;
 
 #else
@@ -202,47 +196,39 @@ bool wait(ProcessHandle& handle, int& exit_code, int timeout_ms, std::string* er
     }
 
     int status = 0;
+
     if (timeout_ms < 0) {
-        while (true) {
-            pid_t r = waitpid(handle.pid, &status, 0);
-            if (r == -1 && errno == EINTR) continue;
-            else if (r == handle.pid) break;
-            else {
-                set_err(err, "waitpid failed: " + std::to_string(errno));
-                return false;
-            }
-        }
+        while (waitpid(handle.pid, &status, 0) == -1 && errno == EINTR);
     } else {
         auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
         while (true) {
             pid_t r = waitpid(handle.pid, &status, WNOHANG);
-            if (r == 0) {
-                if (std::chrono::steady_clock::now() >= deadline) {
-                    set_err(err, "Timed out");
-                    return false;
-                }
-                std::this_thread::sleep_for(std::chrono::milliseconds(25));
-                continue;
-            } else if (r == -1) {
-                if (errno == EINTR) continue;
+            if (r == handle.pid) break;
+            if (r == -1 && errno != EINTR) {
                 set_err(err, "waitpid failed: " + std::to_string(errno));
                 return false;
-            } else break;
+            }
+            if (std::chrono::steady_clock::now() >= deadline) {
+                set_err(err, "Timeout");
+                return false;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
         }
     }
 
     handle.pid = -1;
-    if (WIFEXITED(status)) exit_code = WEXITSTATUS(status);
-    else if (WIFSIGNALED(status)) exit_code = 128 + WTERMSIG(status);
-    else exit_code = status;
+    if (WIFEXITED(status))
+        exit_code = WEXITSTATUS(status);
+    else if (WIFSIGNALED(status))
+        exit_code = 128 + WTERMSIG(status);
+    else
+        exit_code = status;
 
     return true;
 #endif
 }
 
-// =====================
-// Закрытие дескриптора
-// =====================
+// закрыть дескриптор
 void close(ProcessHandle& handle) {
 #ifdef _WIN32
     if (handle.process) {

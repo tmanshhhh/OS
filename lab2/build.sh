@@ -1,44 +1,24 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-# Папка скрипта
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-cd "$SCRIPT_DIR"
+# Usage: ./build.sh [BuildType]
+# Default: Debug
+# Requires: git, cmake, gcc/g++
 
-echo "=============================="
-echo "Pulling latest changes from Git"
-echo "=============================="
-git pull
+BUILD_TYPE="${1:-Debug}"
 
-# Создаём папку сборки
-mkdir -p build
-cd build
+SCRIPT_DIR="$(cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+PROJECT_ROOT="${SCRIPT_DIR}"
 
-echo "=============================="
-echo "Configuring project with CMake"
-echo "=============================="
-cmake ..
+echo "Updating repository..."
+git -C "${PROJECT_ROOT}" pull --rebase
 
-echo "=============================="
-echo "Building project"
-echo "=============================="
-cmake --build .
+echo "Configuring CMake (${BUILD_TYPE})..."
+cmake -S "${PROJECT_ROOT}" \
+      -B "${PROJECT_ROOT}/build" \
+      -DCMAKE_BUILD_TYPE="${BUILD_TYPE}"
 
-if [ $? -eq 0 ]; then
-    echo "=============================="
-    echo "Build successful!"
-    echo "=============================="
+echo "Building project..."
+cmake --build "${PROJECT_ROOT}/build" --config "${BUILD_TYPE}"
 
-    echo
-    read -p "Do you want to run the test utility? [y/N] " response
-    if [[ "$response" =~ ^([yY][eE][sS]|[yY])+$ ]]; then
-        echo "=============================="
-        echo "Running test utility"
-        echo "=============================="
-        ./test_runner
-    fi
-else
-    echo "=============================="
-    echo "Build failed!"
-    echo "=============================="
-    exit 1
-fi
+echo "Done. Binaries are in ${PROJECT_ROOT}/build/bin"

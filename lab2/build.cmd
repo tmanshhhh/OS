@@ -1,83 +1,31 @@
 @echo off
-setlocal enabledelayedexpansion
+setlocal ENABLEEXTENSIONS
 
-REM -------------------------------
-REM Папка скрипта
-REM -------------------------------
-set "SCRIPT_DIR=%~dp0"
-cd /d "%SCRIPT_DIR%"
+REM Usage: build.cmd [BuildType]
+REM Default: Debug
+REM Requires: git, cmake, MinGW (or Ninja)
 
-echo ===============================
-echo Pulling latest changes from Git
-echo ===============================
-git pull
+set BUILD_TYPE=%1
+if "%BUILD_TYPE%"=="" set BUILD_TYPE=Debug
 
-REM -------------------------------
-REM Проверяем наличие CMake
-REM -------------------------------
-where cmake >nul 2>nul
-if %ERRORLEVEL% neq 0 (
-    echo CMake not found! Please install CMake and add it to PATH
-    exit /b 1
-)
+set SCRIPT_DIR=%~dp0
+set PROJECT_ROOT=%SCRIPT_DIR%
 
-REM -------------------------------
-REM Создаём папку сборки
-REM -------------------------------
-if not exist build mkdir build
-cd build
+echo Updating repository...
+git -C "%PROJECT_ROOT%" pull --rebase
+if errorlevel 1 goto :error
 
-echo ===============================
-echo Configuring project with CMake
-echo ===============================
-cmake -G "Ninja" ..
+echo Configuring CMake (%BUILD_TYPE%)...
+cmake -S "%PROJECT_ROOT%" -B "%PROJECT_ROOT%\build" -DCMAKE_BUILD_TYPE=%BUILD_TYPE%
+if errorlevel 1 goto :error
 
-echo ===============================
-echo Building project
-echo ===============================
-cmake --build .
+echo Building project...
+cmake --build "%PROJECT_ROOT%\build" --config %BUILD_TYPE%
+if errorlevel 1 goto :error
 
-REM -------------------------------
-REM Возвращаемся в папку build
-REM -------------------------------
-cd "%SCRIPT_DIR%\build"
+echo Done. Binaries are in %PROJECT_ROOT%\build\bin
+exit /b 0
 
-if %ERRORLEVEL% equ 0 (
-    echo ===============================
-    echo Build successful!
-    echo ===============================
-
-    REM -------------------------------
-    REM Спрашиваем, запускать ли тестовую утилиту
-    REM -------------------------------
-    set /p RUN_TESTS="Do you want to run the test utility? [y/N] "
-    set "RUN_TESTS=!RUN_TESTS: =!"  REM Убираем пробелы
-
-    if /i "!RUN_TESTS!"=="y" (
-        echo ===============================
-        echo Running test utility
-        echo ===============================
-
-        REM -------------------------------
-        REM Ищем исполняемый файл
-        REM -------------------------------
-        set "EXE_PATH=%CD%\test_runner.exe"
-        if not exist "!EXE_PATH!" set "EXE_PATH=%CD%\bin\test_runner.exe"
-
-        echo Using executable: "!EXE_PATH!"
-
-        if exist "!EXE_PATH!" (
-            "!EXE_PATH!"
-        ) else (
-            echo Cannot find test_runner.exe!
-        )
-    )
-) else (
-    echo ===============================
-    echo Build failed!
-    echo ===============================
-    exit /b 1
-)
-
-endlocal
-pause
+:error
+echo Build failed. See output above.
+exit /b 1
