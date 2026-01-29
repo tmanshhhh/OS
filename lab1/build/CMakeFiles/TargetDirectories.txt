@@ -1,3 +1,0 @@
-C:/Users/taisi/OS/lab1/build/CMakeFiles/hello_world_cpp.dir
-C:/Users/taisi/OS/lab1/build/CMakeFiles/edit_cache.dir
-C:/Users/taisi/OS/lab1/build/CMakeFiles/rebuild_cache.dir
