@@ -12,8 +12,10 @@ set SCRIPT_DIR=%~dp0
 set PROJECT_ROOT=%SCRIPT_DIR%
 
 echo Updating repository...
-git -C "%PROJECT_ROOT%" pull --rebase
+pushd %PROJECT_ROOT%
+git pull --rebase
 if errorlevel 1 goto :error
+popd
 
 echo Configuring CMake (%BUILD_TYPE%)...
 cmake -S "%PROJECT_ROOT%" -B "%PROJECT_ROOT%\build" -DCMAKE_BUILD_TYPE=%BUILD_TYPE%
