@@ -18,11 +18,11 @@ if errorlevel 1 goto :error
 popd
 
 echo Configuring CMake (%BUILD_TYPE%)...
-cmake -S "%PROJECT_ROOT%" -B "%PROJECT_ROOT%\build" -DCMAKE_BUILD_TYPE=%BUILD_TYPE%
+cmake -S %PROJECT_ROOT% -B %PROJECT_ROOT%\build -DCMAKE_BUILD_TYPE=%BUILD_TYPE%
 if errorlevel 1 goto :error
 
 echo Building project...
-cmake --build "%PROJECT_ROOT%\build" --config %BUILD_TYPE%
+cmake --build %PROJECT_ROOT%\build --config %BUILD_TYPE%
 if errorlevel 1 goto :error
 
 echo Done. Binaries are in %PROJECT_ROOT%\build\bin
