@@ -1,7 +1,9 @@
 @echo off
 setlocal enabledelayedexpansion
 
+REM -------------------------------
 REM Папка скрипта
+REM -------------------------------
 set "SCRIPT_DIR=%~dp0"
 cd /d "%SCRIPT_DIR%"
 
@@ -10,14 +12,18 @@ echo Pulling latest changes from Git
 echo ===============================
 git pull
 
-REM Проверяем CMake
+REM -------------------------------
+REM Проверяем наличие CMake
+REM -------------------------------
 where cmake >nul 2>nul
 if %ERRORLEVEL% neq 0 (
     echo CMake not found! Please install CMake and add it to PATH
     exit /b 1
 )
 
+REM -------------------------------
 REM Создаём папку сборки
+REM -------------------------------
 if not exist build mkdir build
 cd build
 
@@ -31,27 +37,40 @@ echo Building project
 echo ===============================
 cmake --build .
 
+REM -------------------------------
+REM Возвращаемся в папку build
+REM -------------------------------
+cd "%SCRIPT_DIR%\build"
+
 if %ERRORLEVEL% equ 0 (
     echo ===============================
     echo Build successful!
     echo ===============================
 
-    echo.
+    REM -------------------------------
+    REM Спрашиваем, запускать ли тестовую утилиту
+    REM -------------------------------
     set /p RUN_TESTS="Do you want to run the test utility? [y/N] "
+    set "RUN_TESTS=!RUN_TESTS: =!"  REM Убираем пробелы
+
     if /i "!RUN_TESTS!"=="y" (
         echo ===============================
         echo Running test utility
         echo ===============================
 
-        set EXE_PATH=%CD%\test_runner.exe
-        if not exist %EXE_PATH% set EXE_PATH=%CD%\bin\test_runner.exe
+        REM -------------------------------
+        REM Ищем исполняемый файл
+        REM -------------------------------
+        set "EXE_PATH=%CD%\test_runner.exe"
+        if not exist "!EXE_PATH!" set "EXE_PATH=%CD%\bin\test_runner.exe"
 
-        if exist %EXE_PATH% (
-            %EXE_PATH%
+        echo Using executable: "!EXE_PATH!"
+
+        if exist "!EXE_PATH!" (
+            "!EXE_PATH!"
         ) else (
             echo Cannot find test_runner.exe!
         )
-
     )
 ) else (
     echo ===============================
