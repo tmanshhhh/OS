@@ -4,4 +4,4 @@ project(hello_world_cpp)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-add_executable(hello_world_cpp main.cpp) 
+add_executable(hello_world_cpp src/main.cpp)
