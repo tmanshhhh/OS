@@ -15,12 +15,12 @@ cd build
 echo ===============================
 echo Configuring project with CMake
 echo ===============================
-cmake -G "MinGW Makefiles" ..
+cmake -G Ninja ..
 
 echo ===============================
 echo Building project
 echo ===============================
-mingw32-make
+ninja
 
 echo ===============================
 echo Running the program
