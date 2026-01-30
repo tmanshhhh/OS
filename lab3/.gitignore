@@ -1,0 +1,40 @@
+# CMake 
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+build/
+*.cmake
+
+# Binaries
+*.exe
+*.obj
+*.o
+*.out
+*.a
+*.so
+*.dll
+*.lib
+
+# Visual Studio / Windows
+*.vcxproj.user
+*.suo
+*.user
+*.pdb
+*.idb
+
+# Linux 
+*.swp
+*~
+*.log
+
+# Logs 
+logs/
+*.log
+
+# Shared memory / temporary
+shared.bin
+*.lock
+
+# Misc
+.DS_Store
