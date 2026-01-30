@@ -30,7 +30,11 @@ add_executable(lab3
 target_include_directories(lab3 PRIVATE include)
 
 # --- Link libraries ---
-target_link_libraries(lab3 PRIVATE Threads::Threads)
+if(UNIX)
+    target_link_libraries(lab3_main PRIVATE Threads::Threads rt)
+else()
+    target_link_libraries(lab3_main PRIVATE Threads::Threads)
+endif()
 
 # --- Windows-specific definitions ---
 if(WIN32)
