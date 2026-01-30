@@ -2,12 +2,11 @@ cmake_minimum_required(VERSION 3.10)
 
 project(Lab3 LANGUAGES CXX)
 
-# --- C++ Standard ---
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# --- Output directory ---
+# Output directory 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 if(CMAKE_CONFIGURATION_TYPES)
     foreach(OUTPUTCONFIG IN LISTS CMAKE_CONFIGURATION_TYPES)
@@ -16,27 +15,27 @@ if(CMAKE_CONFIGURATION_TYPES)
     endforeach()
 endif()
 
-# --- Threads ---
+# Threads 
 find_package(Threads REQUIRED)
 
-# --- Executable ---
+# Executable 
 add_executable(lab3
     src/main.cpp
     src/app.cpp
     src/platform.cpp
 )
 
-# --- Include directories ---
+# Include directories 
 target_include_directories(lab3 PRIVATE include)
 
-# --- Link libraries ---
+# Link libraries
 if(UNIX)
-    target_link_libraries(lab3_main PRIVATE Threads::Threads rt)
+    target_link_libraries(lab3 PRIVATE Threads::Threads rt)
 else()
-    target_link_libraries(lab3_main PRIVATE Threads::Threads)
+    target_link_libraries(lab3 PRIVATE Threads::Threads)
 endif()
 
-# --- Windows-specific definitions ---
+# Windows-specific definitions
 if(WIN32)
     target_compile_definitions(lab3 PRIVATE _WIN32_WINNT=0x0601)
 endif()
