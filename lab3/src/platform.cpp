@@ -7,6 +7,7 @@
 #include <fstream>
 #include <iomanip>
 #include <sstream>
+#include <iostream>
 
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -31,11 +32,24 @@ namespace lab3 {
 namespace {
 void ensure_dir(const fs::path& p) {
     std::error_code ec;
-    fs::create_directories(p, ec);
+    if (!fs::exists(p)) {
+        fs::create_directories(p, ec);
+        if (ec) {
+            std::cerr << "Failed to create directory: " << p << ", " << ec.message() << std::endl;
+        }
+    }
+}
+
+void ensure_log_file(const fs::path& p) {
+    ensure_dir(p.parent_path());
+    std::ofstream out(p, std::ios::app);
+    if (!out) {
+        std::cerr << "Cannot create log file: " << p << std::endl;
+    }
 }
 } // namespace
 
-// Process & sleep
+// Process & Sleep 
 pid_t get_pid() {
 #ifdef _WIN32
     return static_cast<pid_t>(GetCurrentProcessId());
@@ -52,7 +66,7 @@ void sleep_ms(std::uint32_t ms) {
 #endif
 }
 
-// Time string 
+// Time
 std::string time_now() {
     using namespace std::chrono;
     auto now = system_clock::now();
@@ -84,18 +98,24 @@ std::string shared_file_path() {
 }
 
 std::string log_file_path() {
-    fs::path p = fs::path(data_dir()) / "logs";
-    ensure_dir(p);
-    return (p / "app.log").string();
+    static fs::path log_path = fs::path(data_dir()) / "logs" / "app.log";
+    ensure_log_file(log_path);
+    return log_path.string();
 }
 
-// Logging 
+// Logging
 void log_line(const std::string& line) {
-    std::ofstream out(log_file_path(), std::ios::app);
-    out << line << std::endl;
+    const fs::path path = log_file_path();
+    ensure_log_file(path);
+    std::ofstream out(path, std::ios::app);
+    if (out) {
+        out << line << std::endl;
+    } else {
+        std::cerr << "Cannot open log file for writing: " << path << std::endl;
+    }
 }
 
-// Shared memory 
+// Shared Memory 
 static SharedState* g_shared = nullptr;
 
 SharedState* open_shared_state() {
@@ -114,7 +134,8 @@ SharedState* open_shared_state() {
     int fd = shm_open("/lab3_shared", O_CREAT | O_RDWR, 0666);
     if (fd < 0) return nullptr;
 
-    ftruncate(fd, sizeof(SharedState));
+    if (ftruncate(fd, sizeof(SharedState)) != 0) return nullptr;
+
     void* ptr = mmap(nullptr, sizeof(SharedState),
                      PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
     if (ptr == MAP_FAILED) return nullptr;
@@ -138,7 +159,7 @@ void close_shared_state() {
 #endif
 }
 
-// Global lock 
+// Global Lock 
 #ifdef _WIN32
 static HANDLE g_mutex = nullptr;
 #else
@@ -165,7 +186,7 @@ LockGuard::~LockGuard() {
 #endif
 }
 
-// Spawn child 
+// Child Process
 pid_t spawn_child(int mode) {
 #ifdef _WIN32
     fs::path exe_path = fs::current_path() / "lab3.exe";
@@ -200,17 +221,16 @@ pid_t spawn_child(int mode) {
 #endif
 }
 
-// Check if process alive 
+// Check Process
 bool is_process_alive(pid_t pid) {
-#ifdef _WIN32
     if (pid <= 0) return false;
+#ifdef _WIN32
     HANDLE h = OpenProcess(SYNCHRONIZE, FALSE, static_cast<DWORD>(pid));
     if (!h) return false;
     DWORD code = WaitForSingleObject(h, 0);
     CloseHandle(h);
     return code == WAIT_TIMEOUT;
 #else
-    if (pid <= 0) return false;
     int r = kill(static_cast<pid_t>(pid), 0);
     return r == 0 || errno == EPERM;
 #endif
