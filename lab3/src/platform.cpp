@@ -20,36 +20,51 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <sys/wait.h>
 #include <signal.h>
+#include <errno.h>
 #endif
 
 namespace fs = std::filesystem;
 
 namespace lab3 {
 
-// Helpers
+// helpers
 namespace {
+
+fs::path executable_dir() {
+#ifdef _WIN32
+    char buf[MAX_PATH]{};
+    GetModuleFileNameA(nullptr, buf, MAX_PATH);
+    return fs::path(buf).parent_path();
+#else
+    char buf[4096]{};
+    ssize_t len = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+    if (len <= 0) return fs::current_path();
+    buf[len] = '\0';
+    return fs::path(buf).parent_path();
+#endif
+}
+
 void ensure_dir(const fs::path& p) {
     std::error_code ec;
-    if (!fs::exists(p)) {
-        fs::create_directories(p, ec);
-        if (ec) {
-            std::cerr << "Failed to create directory: " << p << ", " << ec.message() << std::endl;
+
+    if (fs::exists(p, ec)) {
+        if (!fs::is_directory(p, ec)) {
+            std::cerr << "Path exists but is not a directory: " << p << std::endl;
         }
+        return;
+    }
+
+    fs::create_directories(p, ec);
+    if (ec) {
+        std::cerr << "Failed to create directory: " << p
+                  << " (" << ec.message() << ")" << std::endl;
     }
 }
 
-void ensure_log_file(const fs::path& p) {
-    ensure_dir(p.parent_path());
-    std::ofstream out(p, std::ios::app);
-    if (!out) {
-        std::cerr << "Cannot create log file: " << p << std::endl;
-    }
-}
 } // namespace
 
-// Process & Sleep 
+// process
 pid_t get_pid() {
 #ifdef _WIN32
     return static_cast<pid_t>(GetCurrentProcessId());
@@ -66,9 +81,10 @@ void sleep_ms(std::uint32_t ms) {
 #endif
 }
 
-// Time
+// time
 std::string time_now() {
     using namespace std::chrono;
+
     auto now = system_clock::now();
     auto ms = duration_cast<milliseconds>(now.time_since_epoch()) % 1000;
     std::time_t t = system_clock::to_time_t(now);
@@ -86,36 +102,45 @@ std::string time_now() {
     return oss.str();
 }
 
-// Paths
-std::string data_dir() {
-    static fs::path dir = fs::current_path() / "lab3";
+// paths
+fs::path data_dir_path() {
+    static fs::path dir = executable_dir() / "data";
     ensure_dir(dir);
-    return dir.string();
+    return dir;
+}
+
+std::string data_dir() {
+    return data_dir_path().string();
 }
 
 std::string shared_file_path() {
-    return (fs::path(data_dir()) / "shared.bin").string();
+    return (data_dir_path() / "shared.bin").string();
 }
 
 std::string log_file_path() {
-    static fs::path log_path = fs::path(data_dir()) / "logs" / "app.log";
-    ensure_log_file(log_path);
-    return log_path.string();
-}
+    fs::path logs = data_dir_path() / "logs";
+    ensure_dir(logs);
 
-// Logging
-void log_line(const std::string& line) {
-    const fs::path path = log_file_path();
-    ensure_log_file(path);
-    std::ofstream out(path, std::ios::app);
-    if (out) {
-        out << line << std::endl;
-    } else {
-        std::cerr << "Cannot open log file for writing: " << path << std::endl;
+    fs::path log = logs / "app.log";
+    std::ofstream out(log, std::ios::app);
+    if (!out) {
+        std::cerr << "Cannot create log file: " << log << std::endl;
     }
+    return log.string();
 }
 
-// Shared Memory 
+// logging 
+void log_line(const std::string& line) {
+    fs::path path = log_file_path();
+    std::ofstream out(path, std::ios::app);
+    if (!out) {
+        std::cerr << "Cannot open log file: " << path << std::endl;
+        return;
+    }
+    out << line << std::endl;
+}
+
+// shared memory
 static SharedState* g_shared = nullptr;
 
 SharedState* open_shared_state() {
@@ -159,7 +184,7 @@ void close_shared_state() {
 #endif
 }
 
-// Global Lock 
+// lock
 #ifdef _WIN32
 static HANDLE g_mutex = nullptr;
 #else
@@ -186,24 +211,22 @@ LockGuard::~LockGuard() {
 #endif
 }
 
-// Child Process
+// spawn
 pid_t spawn_child(int mode) {
 #ifdef _WIN32
-    fs::path exe_path = fs::current_path() / "lab3.exe";
-    std::string exe = exe_path.string();
+    fs::path exe = executable_dir() / "lab3.exe";
 
     std::ostringstream cmd;
-    cmd << "\"" << exe << "\" --child " << mode;
+    cmd << "\"" << exe.string() << "\" --child " << mode;
 
     STARTUPINFOA si{};
     PROCESS_INFORMATION pi{};
     si.cb = sizeof(si);
 
     std::string cmdline = cmd.str();
-    if (!CreateProcessA(
-            nullptr, cmdline.data(),
-            nullptr, nullptr, FALSE, 0,
-            nullptr, nullptr, &si, &pi)) {
+    if (!CreateProcessA(nullptr, cmdline.data(),
+                        nullptr, nullptr, FALSE, 0,
+                        nullptr, nullptr, &si, &pi)) {
         return 0;
     }
 
@@ -213,25 +236,25 @@ pid_t spawn_child(int mode) {
 #else
     pid_t pid = fork();
     if (pid == 0) {
-        execlp("./lab3", "./lab3", "--child",
-               (mode == 1 ? "1" : "2"), nullptr);
+        execl("./lab3", "./lab3", "--child",
+              mode == 1 ? "1" : "2", nullptr);
         _exit(1);
     }
     return pid;
 #endif
 }
 
-// Check Process
+// check 
 bool is_process_alive(pid_t pid) {
     if (pid <= 0) return false;
 #ifdef _WIN32
-    HANDLE h = OpenProcess(SYNCHRONIZE, FALSE, static_cast<DWORD>(pid));
+    HANDLE h = OpenProcess(SYNCHRONIZE, FALSE, pid);
     if (!h) return false;
-    DWORD code = WaitForSingleObject(h, 0);
+    DWORD r = WaitForSingleObject(h, 0);
     CloseHandle(h);
-    return code == WAIT_TIMEOUT;
+    return r == WAIT_TIMEOUT;
 #else
-    int r = kill(static_cast<pid_t>(pid), 0);
+    int r = kill(pid, 0);
     return r == 0 || errno == EPERM;
 #endif
 }
