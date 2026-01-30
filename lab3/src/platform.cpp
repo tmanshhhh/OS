@@ -5,34 +5,37 @@
 #include <ctime>
 #include <filesystem>
 #include <fstream>
-#include <sstream>
 #include <iomanip>
+#include <sstream>
 
 #ifdef _WIN32
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 #include <windows.h>
 #else
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <unistd.h>
+#include <sys/wait.h>
 #include <signal.h>
-#include <pthread.h>
 #endif
 
 namespace fs = std::filesystem;
 
 namespace lab3 {
 
-// HELPERS 
+// Helpers
 namespace {
 void ensure_dir(const fs::path& p) {
     std::error_code ec;
     fs::create_directories(p, ec);
 }
-}
+} // namespace
 
-// PID & Sleep 
+// Process & sleep
 pid_t get_pid() {
 #ifdef _WIN32
     return static_cast<pid_t>(GetCurrentProcessId());
@@ -49,21 +52,23 @@ void sleep_ms(std::uint32_t ms) {
 #endif
 }
 
-// Time 
+// Time string 
 std::string time_now() {
     using namespace std::chrono;
     auto now = system_clock::now();
     auto ms = duration_cast<milliseconds>(now.time_since_epoch()) % 1000;
     std::time_t t = system_clock::to_time_t(now);
+
     std::tm tm{};
 #ifdef _WIN32
     localtime_s(&tm, &t);
 #else
     localtime_r(&t, &tm);
 #endif
+
     std::ostringstream oss;
-    oss << std::put_time(&tm, "%Y-%m-%d %H:%M:%S") << "." 
-        << std::setw(3) << std::setfill('0') << ms.count();
+    oss << std::put_time(&tm, "%Y-%m-%d %H:%M:%S")
+        << '.' << std::setw(3) << std::setfill('0') << ms.count();
     return oss.str();
 }
 
@@ -86,12 +91,11 @@ std::string log_file_path() {
 
 // Logging 
 void log_line(const std::string& line) {
-    static fs::path path = log_file_path();
-    std::ofstream out(path, std::ios::app);
+    std::ofstream out(log_file_path(), std::ios::app);
     out << line << std::endl;
 }
 
-// Shared Memory 
+// Shared memory 
 static SharedState* g_shared = nullptr;
 
 SharedState* open_shared_state() {
@@ -99,17 +103,22 @@ SharedState* open_shared_state() {
     HANDLE hMap = CreateFileMappingA(
         INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE,
         0, sizeof(SharedState), "Lab3SharedMemory");
+
     if (!hMap) return nullptr;
+
     void* ptr = MapViewOfFile(hMap, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(SharedState));
     if (!ptr) return nullptr;
+
     g_shared = static_cast<SharedState*>(ptr);
 #else
     int fd = shm_open("/lab3_shared", O_CREAT | O_RDWR, 0666);
     if (fd < 0) return nullptr;
+
     ftruncate(fd, sizeof(SharedState));
     void* ptr = mmap(nullptr, sizeof(SharedState),
                      PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
     if (ptr == MAP_FAILED) return nullptr;
+
     g_shared = static_cast<SharedState*>(ptr);
 #endif
     return g_shared;
@@ -129,7 +138,7 @@ void close_shared_state() {
 #endif
 }
 
-// Global Lock 
+// Global lock 
 #ifdef _WIN32
 static HANDLE g_mutex = nullptr;
 #else
@@ -139,7 +148,9 @@ static pthread_mutex_t g_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 LockGuard::LockGuard() {
 #ifdef _WIN32
-    if (!g_mutex) g_mutex = CreateMutexA(nullptr, FALSE, "Lab3GlobalMutex");
+    if (!g_mutex) {
+        g_mutex = CreateMutexA(nullptr, FALSE, "Lab3GlobalMutex");
+    }
     WaitForSingleObject(g_mutex, INFINITE);
 #else
     pthread_mutex_lock(&g_mutex);
@@ -154,42 +165,55 @@ LockGuard::~LockGuard() {
 #endif
 }
 
-// Child Process
-bool is_process_alive(pid_t pid) {
-    if (pid <= 0) return false;
-#ifdef _WIN32
-    HANDLE h = OpenProcess(SYNCHRONIZE, FALSE, static_cast<DWORD>(pid));
-    if (!h) return false;
-    DWORD code = WaitForSingleObject(h, 0);
-    CloseHandle(h);
-    return code == WAIT_TIMEOUT;
-#else
-    return kill(pid, 0) == 0 || errno == EPERM;
-#endif
-}
-
+// Spawn child 
 pid_t spawn_child(int mode) {
-    std::string exe = fs::current_path() / "lab3";
 #ifdef _WIN32
-    char exe_path[MAX_PATH];
-    GetModuleFileNameA(nullptr, exe_path, MAX_PATH);
-    std::ostringstream cmd;
-    cmd << "\"" << exe_path << "\" --child " << mode;
+    fs::path exe_path = fs::current_path() / "lab3.exe";
+    std::string exe = exe_path.string();
 
-    STARTUPINFOA si{}; PROCESS_INFORMATION pi{}; si.cb = sizeof(si);
+    std::ostringstream cmd;
+    cmd << "\"" << exe << "\" --child " << mode;
+
+    STARTUPINFOA si{};
+    PROCESS_INFORMATION pi{};
+    si.cb = sizeof(si);
+
     std::string cmdline = cmd.str();
-    if (!CreateProcessA(nullptr, cmdline.data(), nullptr, nullptr, FALSE, 0,
-                        nullptr, nullptr, &si, &pi)) return 0;
-    CloseHandle(pi.hThread); CloseHandle(pi.hProcess);
+    if (!CreateProcessA(
+            nullptr, cmdline.data(),
+            nullptr, nullptr, FALSE, 0,
+            nullptr, nullptr, &si, &pi)) {
+        return 0;
+    }
+
+    CloseHandle(pi.hThread);
+    CloseHandle(pi.hProcess);
     return static_cast<pid_t>(pi.dwProcessId);
 #else
     pid_t pid = fork();
     if (pid == 0) {
-        execl(exe.c_str(), exe.c_str(), "--child", (mode == 1 ? "1" : "2"), nullptr);
+        execlp("./lab3", "./lab3", "--child",
+               (mode == 1 ? "1" : "2"), nullptr);
         _exit(1);
     }
     return pid;
 #endif
 }
 
-}  // namespace lab3
+// Check if process alive 
+bool is_process_alive(pid_t pid) {
+#ifdef _WIN32
+    if (pid <= 0) return false;
+    HANDLE h = OpenProcess(SYNCHRONIZE, FALSE, static_cast<DWORD>(pid));
+    if (!h) return false;
+    DWORD code = WaitForSingleObject(h, 0);
+    CloseHandle(h);
+    return code == WAIT_TIMEOUT;
+#else
+    if (pid <= 0) return false;
+    int r = kill(static_cast<pid_t>(pid), 0);
+    return r == 0 || errno == EPERM;
+#endif
+}
+
+} // namespace lab3
