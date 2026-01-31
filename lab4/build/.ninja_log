@@ -1,5 +1,0 @@
-# ninja log v7
-26	832	7915302870029010	CMakeFiles/lab4_main.dir/src/time_utils.cpp.obj	523dd7c505707fa3
-29	1293	7915302870059073	CMakeFiles/lab4_main.dir/src/logging.cpp.obj	735159f7a5fd52f4
-33	1483	7915302870128991	CMakeFiles/lab4_main.dir/src/simulator.cpp.obj	531fc19e1393a74c
-23	3408	7915302869989111	CMakeFiles/lab4_main.dir/src/common.cpp.obj	360f5d1204eb541a

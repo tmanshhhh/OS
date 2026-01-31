@@ -1,3 +1,0 @@
-C:/Users/taisi/OS/lab4/build/CMakeFiles/lab4_main.dir
-C:/Users/taisi/OS/lab4/build/CMakeFiles/edit_cache.dir
-C:/Users/taisi/OS/lab4/build/CMakeFiles/rebuild_cache.dir
