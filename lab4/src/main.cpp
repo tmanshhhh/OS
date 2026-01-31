@@ -93,7 +93,7 @@ int run(bool simulate) {
         write_measurement(m);
 
         prune_measurements_log(hours(24));
-        prune_hourly_log(days(30));
+        prune_hourly_log(std::chrono::hours(24*30));  
         prune_daily_log(last_year);
     }
 
